@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Early Warning System - IoT</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- MQTT.js -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <style>
+        :root {
+            --bg-body: #f4f6f9;
+            --bg-sidebar: #ffffff;
+            --bg-card: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: #e2e8f0;
+            --shadow: 0 4px 12px rgba(0,0,0,0.05);
+            --shadow-hover: 0 8px 20px rgba(0,0,0,0.1);
+        }
+
+        /* Dark mode variables */
+        body.dark-mode {
+            --bg-body: #0f172a;
+            --bg-sidebar: #1e293b;
+            --bg-card: #1e293b;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --border: #334155;
+            --shadow: 0 4px 12px rgba(0,0,0,0.3);
+            --shadow-hover: 0 8px 20px rgba(0,0,0,0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 260px;
+            height: 100vh;
+            background-color: var(--bg-sidebar);
+            padding: 1.5rem 1rem;
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, background-color 0.3s;
+        }
+        .sidebar .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .sidebar .nav-link {
+            color: var(--accent);
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            margin-bottom: 0.25rem;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background-color: var(--accent);
+            color: #ffffff;
+        }
+        .sidebar .nav-link i { font-size: 1.2rem; }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+        .status-connected { background-color: var(--success); }
+        .status-disconnected { background-color: var(--danger); }
+
+        .main-content {
+            margin-left: 260px;
+            padding: 1.5rem;
+            transition: margin-left 0.3s ease;
+        }
+
+        .card-sensor {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            transition: transform 0.3s, box-shadow 0.3s, background-color 0.3s, border-color 0.3s;
+            height: 100%;
+        }
+        .card-sensor:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+        }
+        .card-sensor .sensor-icon {
+            font-size: 2rem;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+        }
+        .card-sensor .sensor-value {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        .card-sensor .sensor-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        .card-sensor .sensor-unit { font-size: 0.9rem; color: var(--text-secondary); margin-left: 0.25rem; }
+
+        .card-sensor.alert-danger {
+            border-left: 4px solid var(--danger);
+            background-color: #fef2f2;
+        }
+        .card-sensor.alert-warning {
+            border-left: 4px solid var(--warning);
+            background-color: #fffbeb;
+        }
+
+        .chart-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            height: 300px;
+            min-height: 300px;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        @media (max-width: 768px) {
+            .chart-container { height: 220px; min-height: 220px; }
+        }
+
+        .table-custom { background-color: var(--bg-card); border-radius: 1rem; overflow: hidden; transition: background-color 0.3s; }
+        .table-custom thead th {
+            background-color: var(--bg-body);
+            color: var(--text-secondary);
+            border-bottom: 2px solid var(--border);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .table-custom tbody td { vertical-align: middle; border-color: var(--border); }
+        .table-custom tbody tr:hover { background-color: rgba(37,99,235,0.04); }
+
+        .relay-card { background-color: var(--bg-card); border: 1px solid var(--border); border-radius: 1rem; padding: 1.5rem; transition: background-color 0.3s, border-color 0.3s; }
+        .relay-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .relay-item:last-child { border-bottom: none; }
+        .relay-label { font-weight: 500; }
+
+        .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+        .form-check-input:focus { box-shadow: 0 0 0 0.2rem rgba(37,99,235,0.15); }
+        .form-check-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .device-item:last-child { border-bottom: none; }
+        .device-icon { font-size: 1.5rem; margin-right: 0.75rem; }
+
+        .modal-content { border-radius: 1rem; border: none; box-shadow: 0 20px 40px rgba(0,0,0,0.1); background-color: var(--bg-card); color: var(--text-primary); }
+        .form-control, .form-select { border-radius: 0.5rem; border: 1px solid var(--border); padding: 0.5rem 0.75rem; background-color: var(--bg-body); color: var(--text-primary); }
+        .form-control:focus, .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 0.2rem rgba(37,99,235,0.15); background-color: var(--bg-body); color: var(--text-primary); }
+        .btn-primary { background-color: var(--accent); border: none; border-radius: 0.5rem; }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        .btn-outline-secondary { border-radius: 0.5rem; color: var(--text-secondary); border-color: var(--border); }
+        .btn-outline-secondary:hover { background-color: var(--bg-body); color: var(--text-primary); }
+
+        #liveClock {
+            background: var(--bg-card);
+            padding: 0.5rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            font-weight: 600;
+            color: var(--accent);
+            font-size: 0.95rem;
+            white-space: nowrap;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        .btn-darkmode {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-secondary);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .btn-darkmode:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+    <div class="logo"><i class="bi bi-shield-check"></i><span>EWS IoT</span></div>
+    <nav class="nav flex-column">
+        <a class="nav-link active" href="#dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+        <a class="nav-link" href="#devices"><i class="bi bi-cpu"></i> Perangkat</a>
+        <a class="nav-link" href="#relay"><i class="bi bi-toggle-on"></i> Kontrol Relay</a>
+        <a class="nav-link" href="#charts"><i class="bi bi-graph-up"></i> Grafik</a>
+        <a class="nav-link" href="#history"><i class="bi bi-clock-history"></i> Riwayat</a>
+        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#settingsModal"><i class="bi bi-gear"></i> Pengaturan</a>
+    </nav>
+    <div class="mt-auto">
+        <div class="mb-2"><span class="status-indicator" id="mqttStatus"></span><small>MQTT: <span id="mqttStatusText">Menghubungkan...</span></small></div>
+        <div><span class="status-indicator" id="firestoreStatus"></span><small>Firestore: <span id="firestoreStatusText">Menghubungkan...</span></small></div>
+    </div>
+</aside>
+
+<!-- Main Content -->
+<main class="main-content" id="mainContent">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 mb-0"><i class="bi bi-cloud-rain me-2"></i>Early Warning System</h1>
+            <p class="text-secondary fs-3 mb-0">Sungai Sampean Baru</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span id="liveClock">--</span>
+            <button class="btn-darkmode" id="darkModeToggle" title="Ganti tema">
+                <i class="bi bi-moon-stars" id="darkModeIcon"></i>
+            </button>
+            <button class="btn btn-primary d-md-none" id="sidebarToggle"><i class="bi bi-list"></i></button>
+        </div>
+    </div>
+
+    <!-- Dashboard Cards -->
+    <section id="dashboard">
+        <div class="row g-3">
+            <div class="col-6 col-md-4 col-lg">
+                <div class="card-sensor" id="card-water">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="sensor-icon"><i class="bi bi-droplet"></i></div>
+                        <span class="badge bg-secondary" id="statusBadge">--</span>
+                    </div>
+                    <div class="sensor-value" id="waterLevelValue">--</div>
+                    <div class="sensor-label">Ketinggian Air <span class="sensor-unit">cm</span></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="card-sensor" id="card-temp">
+                    <div class="sensor-icon"><i class="bi bi-thermometer"></i></div>
+                    <div class="sensor-value" id="temperatureValue">--</div>
+                    <div class="sensor-label">Suhu <span class="sensor-unit">°C</span></div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="card-sensor" id="card-presence">
+                    <div class="sensor-icon"><i class="bi bi-droplet-half"></i></div>
+                    <div class="sensor-value" id="presenceValue">--</div>
+                    <div class="sensor-label">Keberadaan Air</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-lg">
+                <div class="card-sensor" id="card-rain">
+                    <div class="sensor-icon"><i class="bi bi-cloud-rain"></i></div>
+                    <div class="sensor-value" id="rainValue">--</div>
+                    <div class="sensor-label">Hujan</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Charts -->
+    <section id="charts" class="mt-4">
+        <h5 class="mb-3"><i class="bi bi-graph-up me-2"></i>Grafik Sensor</h5>
+        <div class="row g-3">
+            <div class="col-12 col-lg-6"><div class="chart-container"><h6 class="mb-3">Ketinggian Air</h6><canvas id="waterChart"></canvas></div></div>
+            <div class="col-12 col-lg-6"><div class="chart-container"><h6 class="mb-3">Suhu</h6><canvas id="tempChart"></canvas></div></div>
+        </div>
+    </section>
+
+    <!-- Perangkat Terhubung -->
+    <section id="devices" class="mt-5">
+        <h5 class="mb-3"><i class="bi bi-cpu me-2"></i>Perangkat Terhubung</h5>
+        <div class="row g-3">
+            <div class="col-12 col-lg-6"><div class="relay-card"><h6 class="mb-3"><i class="bi bi-broadcast me-2"></i>Sensor</h6><div id="sensorList"></div></div></div>
+            <div class="col-12 col-lg-6"><div class="relay-card"><h6 class="mb-3"><i class="bi bi-lightning-charge me-2"></i>Relay</h6><div id="relayList"></div></div></div>
+        </div>
+    </section>
+
+    <!-- Kontrol Relay -->
+    <section id="relay" class="mt-5">
+        <h5 class="mb-3"><i class="bi bi-toggle-on me-2"></i>Kontrol Relay</h5>
+        <div class="relay-card">
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <span class="fw-bold">Mode Kontrol</span>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="relayModeSwitch">
+                    <label class="form-check-label" for="relayModeSwitch" id="relayModeLabel">Manual</label>
+                </div>
+            </div>
+            <div class="relay-item"><span class="relay-label"><i class="bi bi-lightning-charge me-2"></i>Relay 1 (Lampu Hijau - Normal)</span><div class="form-check form-switch"><input class="form-check-input relay-toggle" type="checkbox" id="relay1"></div></div>
+            <div class="relay-item"><span class="relay-label"><i class="bi bi-lightning-charge me-2"></i>Relay 2 (Lampu Kuning - Siaga)</span><div class="form-check form-switch"><input class="form-check-input relay-toggle" type="checkbox" id="relay2"></div></div>
+            <div class="relay-item"><span class="relay-label"><i class="bi bi-lightning-charge me-2"></i>Relay 3 (Lampu Merah - Bahaya)</span><div class="form-check form-switch"><input class="form-check-input relay-toggle" type="checkbox" id="relay3"></div></div>
+            <div class="relay-item"><span class="relay-label"><i class="bi bi-lightning-charge me-2"></i>Relay 4 (Sirine - Bahaya)</span><div class="form-check form-switch"><input class="form-check-input relay-toggle" type="checkbox" id="relay4"></div></div>
+        </div>
+    </section>
+
+    <!-- History Table -->
+    <section id="history" class="mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Riwayat Data</h5>
+            <div class="d-flex align-items-center gap-2">
+                <label for="historyFilter" class="mb-0 text-secondary">Filter:</label>
+                <select id="historyFilter" class="form-select d-inline-block w-auto">
+                    <option value="all">Semua</option>
+                    <option value="daily">Harian (24 jam)</option>
+                    <option value="weekly">Mingguan (7 hari)</option>
+                    <option value="monthly">Bulanan (30 hari)</option>
+                </select>
+                <button class="btn btn-outline-secondary btn-sm" id="exportCSVBtn" title="Ekspor CSV">
+                    <i class="bi bi-download me-1"></i>CSV
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive table-custom">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Waktu</th>
+                        <th>Air (cm)</th>
+                        <th>Suhu (°C)</th>
+                        <th>Keberadaan Air</th>
+                        <th>Hujan</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="settingsModalLabel"><i class="bi bi-gear me-2"></i>Pengaturan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="settingsForm">
+                    <h6 class="text-secondary mb-3">MQTT</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><label class="form-label">Broker URL (WebSocket)</label><input type="text" class="form-control" id="mqttBroker"></div>
+                        <div class="col-md-6"><label class="form-label">Username</label><input type="text" class="form-control" id="mqttUsername"></div>
+                        <div class="col-md-6"><label class="form-label">Password</label><input type="text" class="form-control" id="mqttPassword"></div>
+                        <div class="col-md-6"><label class="form-label">Topik Sensor</label><input type="text" class="form-control" id="mqttTopicSensor"></div>
+                        <div class="col-md-6"><label class="form-label">Topik Relay</label><input type="text" class="form-control" id="mqttTopicRelay"></div>
+                    </div>
+                    <h6 class="text-secondary mb-3">Firestore</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><label class="form-label">Project ID</label><input type="text" class="form-control" id="firestoreProject"></div>
+                        <div class="col-12"><label class="form-label">API Key</label><input type="text" class="form-control" id="firestoreApiKey"></div>
+                    </div>
+                    <h6 class="text-secondary mb-3">Telegram</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><label class="form-label">Bot Token</label><input type="text" class="form-control" id="telegramBotToken"></div>
+                        <div class="col-12"><label class="form-label">Chat ID</label><input type="text" class="form-control" id="telegramChatId"></div>
+                    </div>
+                    <h6 class="text-secondary mb-3">Threshold Peringatan</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4"><label class="form-label">Batas Siaga Air (cm)</label><input type="number" class="form-control" id="thresholdWaterSiaga"></div>
+                        <div class="col-md-4"><label class="form-label">Batas Bahaya Air (cm)</label><input type="number" class="form-control" id="thresholdWaterBahaya"></div>
+                        <div class="col-md-4"><label class="form-label">Batas Suhu Maks (°C)</label><input type="number" class="form-control" id="thresholdTempMax"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="testTelegramBtn"><i class="bi bi-send me-1"></i>Tes Notifikasi</button>
+                <button type="button" class="btn btn-primary" id="saveSettingsBtn"><i class="bi bi-save me-1"></i>Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // ==================== DEFAULT SETTINGS ====================
+    const DEFAULT_SETTINGS = {
+        mqttBroker: 'wss://16eaa408966e4cbdad4c7c24424ce70e.s1.eu.hivemq.cloud:8884/mqtt',
+        mqttUsername: 'esp32',
+        mqttPassword: '12345678',
+        mqttTopicSensor: 'ews/sensor',
+        mqttTopicRelay: 'ews/relay',
+        firestoreProject: 'ews-dashboard-99dda-8504d',
+        firestoreApiKey: 'AIzaSyD6DPeW7x_-LdcWTN2i-FyAJ5iclDb9ei8',
+        telegramBotToken: '8273226161:AAGuuCnKPa1ZmdH8K73z_om-Mxfcw9nshTk',
+        telegramChatId: '1320788287',
+        thresholdWaterSiaga: 50,
+        thresholdWaterBahaya: 250,
+        thresholdTempMax: 40
+    };
+
+    // ==================== STATE ====================
+    let settings = { ...DEFAULT_SETTINGS };
+    let currentData = null;
+    let chartLabels = [];
+    let waterData = [];
+    let tempData = [];
+    let waterChart, tempChart;
+    let mqttClient;
+
+    const relayStates = { 1: false, 2: false, 3: false, 4: false };
+    let relayMode = 'manual';
+    const COOLDOWN = 5 * 60 * 1000;
+    let lastAlert = { status: 0, temp: 0 };
+    let lastKnownStatus = 0;
+
+    const MAX_POINTS = 20;
+    const HISTORY_LIMIT = 1000;
+    let allHistoryData = [];
+    let historyFilterMode = 'all';
+    let lastDataTimestamp = 0;
+
+    // ==================== NORMALISASI TIMESTAMP ====================
+    function normalizeTimestamp(ts) {
+        if (!ts) return Date.now();
+        if (typeof ts === 'number' || typeof ts === 'string') {
+            const num = typeof ts === 'string' ? parseInt(ts) : ts;
+            if (!isNaN(num) && num < 1e12) return num * 1000;
+            return num;
+        }
+        return Date.now();
+    }
+
+    // ==================== LOAD SETTINGS ====================
+    function loadSettings() {
+        const saved = localStorage.getItem('ewsSettings');
+        if (saved) {
+            try { settings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) }; } catch(e) {}
+        }
+        document.getElementById('mqttBroker').value = settings.mqttBroker;
+        document.getElementById('mqttUsername').value = settings.mqttUsername;
+        document.getElementById('mqttPassword').value = settings.mqttPassword;
+        document.getElementById('mqttTopicSensor').value = settings.mqttTopicSensor;
+        document.getElementById('mqttTopicRelay').value = settings.mqttTopicRelay;
+        document.getElementById('firestoreProject').value = settings.firestoreProject;
+        document.getElementById('firestoreApiKey').value = settings.firestoreApiKey;
+        document.getElementById('telegramBotToken').value = settings.telegramBotToken;
+        document.getElementById('telegramChatId').value = settings.telegramChatId;
+        document.getElementById('thresholdWaterSiaga').value = settings.thresholdWaterSiaga;
+        document.getElementById('thresholdWaterBahaya').value = settings.thresholdWaterBahaya;
+        document.getElementById('thresholdTempMax').value = settings.thresholdTempMax;
+    }
+
+    function saveSettings() {
+        settings = {
+            mqttBroker: document.getElementById('mqttBroker').value,
+            mqttUsername: document.getElementById('mqttUsername').value,
+            mqttPassword: document.getElementById('mqttPassword').value,
+            mqttTopicSensor: document.getElementById('mqttTopicSensor').value,
+            mqttTopicRelay: document.getElementById('mqttTopicRelay').value,
+            firestoreProject: document.getElementById('firestoreProject').value,
+            firestoreApiKey: document.getElementById('firestoreApiKey').value,
+            telegramBotToken: document.getElementById('telegramBotToken').value,
+            telegramChatId: document.getElementById('telegramChatId').value,
+            thresholdWaterSiaga: parseFloat(document.getElementById('thresholdWaterSiaga').value),
+            thresholdWaterBahaya: parseFloat(document.getElementById('thresholdWaterBahaya').value),
+            thresholdTempMax: parseFloat(document.getElementById('thresholdTempMax').value)
+        };
+        localStorage.setItem('ewsSettings', JSON.stringify(settings));
+        bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+        location.reload();
+    }
+
+    // ==================== JAM DIGITAL ====================
+    function updateClock() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+        const dateString = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        document.getElementById('liveClock').textContent = `${dateString} | ${timeString}`;
+    }
+
+    // ==================== DARK MODE ====================
+    function loadDarkModePreference() {
+        const darkMode = localStorage.getItem('ewsDarkMode');
+        if (darkMode === '1') {
+            document.body.classList.add('dark-mode');
+            document.getElementById('darkModeIcon').className = 'bi bi-sun';
+        } else {
+            document.body.classList.remove('dark-mode');
+            document.getElementById('darkModeIcon').className = 'bi bi-moon-stars';
+        }
+    }
+
+    function toggleDarkMode() {
+        const isDark = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('ewsDarkMode', isDark ? '1' : '0');
+        document.getElementById('darkModeIcon').className = isDark ? 'bi bi-sun' : 'bi bi-moon-stars';
+    }
+
+    // ==================== MQTT ====================
+    function initMQTT() {
+        mqttClient = mqtt.connect(settings.mqttBroker, {
+            username: settings.mqttUsername,
+            password: settings.mqttPassword,
+            clientId: 'web_' + Math.random().toString(16).substr(2, 8)
+        });
+
+        mqttClient.on('connect', () => {
+            console.log('MQTT connected');
+            document.getElementById('mqttStatus').className = 'status-indicator status-connected';
+            document.getElementById('mqttStatusText').textContent = 'Terhubung';
+            mqttClient.subscribe(settings.mqttTopicSensor);
+        });
+
+        mqttClient.on('message', (topic, message) => {
+            if (topic === settings.mqttTopicSensor) {
+                try {
+                    const data = JSON.parse(message.toString());
+                    updateUI(data, true);
+                } catch (e) { console.error('Gagal parse MQTT:', e); }
+            }
+        });
+
+        mqttClient.on('error', (err) => {
+            console.error('MQTT error:', err);
+            document.getElementById('mqttStatus').className = 'status-indicator status-disconnected';
+            document.getElementById('mqttStatusText').textContent = 'Terputus';
+        });
+    }
+
+    // ==================== FIRESTORE ====================
+    async function fetchFirestoreCurrent() {
+        try {
+            const url = `https://firestore.googleapis.com/v1/projects/${settings.firestoreProject}/databases/(default)/documents/realtime/current?key=${settings.firestoreApiKey}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Firestore fetch failed');
+            const data = await response.json();
+            const fields = data.fields || {};
+            const parsed = {
+                water_level: fields.water_level?.doubleValue ?? null,
+                temperature: fields.temperature?.doubleValue ?? null,
+                water_presence: fields.water_presence?.booleanValue ?? null,
+                rain_detected: fields.rain_detected?.booleanValue ?? null,
+                timestamp: fields.timestamp?.integerValue ? parseInt(fields.timestamp.integerValue) * 1000 : Date.now()
+            };
+            document.getElementById('firestoreStatus').className = 'status-indicator status-connected';
+            document.getElementById('firestoreStatusText').textContent = 'Terhubung';
+            updateUI(parsed, false);
+        } catch (err) {
+            console.warn('Firestore gagal:', err);
+            document.getElementById('firestoreStatus').className = 'status-indicator status-disconnected';
+            document.getElementById('firestoreStatusText').textContent = 'Gagal';
+        }
+    }
+
+    async function fetchFirestoreHistory() {
+        try {
+            const url = `https://firestore.googleapis.com/v1/projects/${settings.firestoreProject}/databases/(default)/documents/history?key=${settings.firestoreApiKey}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Gagal ambil riwayat Firestore');
+            const data = await response.json();
+            const documents = data.documents || [];
+            const historyData = documents.map(doc => {
+                const f = doc.fields || {};
+                return {
+                    water_level: f.water_level?.doubleValue ?? null,
+                    temperature: f.temperature?.doubleValue ?? null,
+                    water_presence: f.water_presence?.booleanValue ?? null,
+                    rain_detected: f.rain_detected?.booleanValue ?? null,
+                    timestamp: f.timestamp?.integerValue ? parseInt(f.timestamp.integerValue) * 1000 : Date.now()
+                };
+            });
+            const validData = historyData.filter(d => d.water_level !== null || d.temperature !== null)
+                .sort((a,b) => b.timestamp - a.timestamp);
+            const combined = [...validData, ...allHistoryData];
+            const uniqueMap = new Map();
+            combined.forEach(item => {
+                const key = `${item.timestamp}_${item.water_level}_${item.temperature}`;
+                if (!uniqueMap.has(key)) uniqueMap.set(key, item);
+            });
+            allHistoryData = Array.from(uniqueMap.values())
+                .sort((a,b) => b.timestamp - a.timestamp)
+                .slice(0, HISTORY_LIMIT);
+            localStorage.setItem('ewsHistoryData', JSON.stringify(allHistoryData));
+            renderHistoryTable();
+            updateChartsFromHistory(); // Muat grafik dari riwayat
+            document.getElementById('firestoreStatus').className = 'status-indicator status-connected';
+            document.getElementById('firestoreStatusText').textContent = 'Terhubung';
+        } catch (err) {
+            console.warn('Gagal ambil riwayat Firestore:', err);
+        }
+    }
+
+    // ==================== UPDATE UI ====================
+    function updateUI(data, isFromMQTT = false) {
+        if (!data) return;
+        currentData = {
+            water_level: data.water_level ?? null,
+            temperature: data.temperature ?? null,
+            water_presence: data.water_presence ?? null,
+            rain_detected: data.rain_detected ?? null,
+            timestamp: normalizeTimestamp(data.timestamp)
+        };
+        lastDataTimestamp = currentData.timestamp;
+
+        document.getElementById('waterLevelValue').textContent = currentData.water_level !== null ? Number(currentData.water_level).toFixed(1) : '--';
+        document.getElementById('temperatureValue').textContent = currentData.temperature !== null ? Number(currentData.temperature).toFixed(1) : '--';
+        document.getElementById('presenceValue').textContent = currentData.water_presence === true ? 'Ada Air' : currentData.water_presence === false ? 'Tidak Ada' : '--';
+        document.getElementById('rainValue').textContent = currentData.rain_detected === true ? 'Hujan' : currentData.rain_detected === false ? 'Tidak Hujan' : '--';
+
+        updateStatusBadge(currentData.water_level);
+        updateWaterCardColor(currentData.water_level);
+
+        const label = new Date(currentData.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        addChartData(label, currentData.water_level, currentData.temperature);
+
+        storeHistoryData(currentData);
+
+        if (isFromMQTT) checkAlerts(currentData);
+        if (relayMode === 'auto') applyAutoRelay(currentData);
+        renderDevices();
+    }
+
+    function updateStatusBadge(water) {
+        const badge = document.getElementById('statusBadge');
+        if (water === null) { badge.textContent = '--'; badge.className = 'badge bg-secondary'; return; }
+        if (water > settings.thresholdWaterBahaya) {
+            badge.textContent = 'BAHAYA'; badge.className = 'badge bg-danger';
+        } else if (water > settings.thresholdWaterSiaga) {
+            badge.textContent = 'SIAGA'; badge.className = 'badge bg-warning text-dark';
+        } else {
+            badge.textContent = 'NORMAL'; badge.className = 'badge bg-success';
+        }
+    }
+
+    function updateWaterCardColor(water) {
+        const card = document.getElementById('card-water');
+        card.classList.remove('alert-danger', 'alert-warning');
+        if (water !== null) {
+            if (water > settings.thresholdWaterBahaya) card.classList.add('alert-danger');
+            else if (water > settings.thresholdWaterSiaga) card.classList.add('alert-warning');
+        }
+    }
+
+    function addChartData(label, water, temp) {
+        chartLabels.push(label);
+        waterData.push(water !== null ? water : null);
+        tempData.push(temp !== null ? temp : null);
+        if (chartLabels.length > MAX_POINTS) {
+            chartLabels.shift(); waterData.shift(); tempData.shift();
+        }
+        if (waterChart) { waterChart.data.labels = chartLabels; waterChart.data.datasets[0].data = waterData; waterChart.update(); }
+        if (tempChart) { tempChart.data.labels = chartLabels; tempChart.data.datasets[0].data = tempData; tempChart.update(); }
+    }
+
+    function updateChartsFromHistory() {
+        // Mengisi grafik dengan data historis (20 terakhir)
+        const recent = allHistoryData.slice(-MAX_POINTS);
+        chartLabels = [];
+        waterData = [];
+        tempData = [];
+        recent.forEach(item => {
+            const label = new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            chartLabels.push(label);
+            waterData.push(item.water_level !== null ? item.water_level : null);
+            tempData.push(item.temperature !== null ? item.temperature : null);
+        });
+        if (waterChart) { waterChart.data.labels = chartLabels; waterChart.data.datasets[0].data = waterData; waterChart.update(); }
+        if (tempChart) { tempChart.data.labels = chartLabels; tempChart.data.datasets[0].data = tempData; tempChart.update(); }
+    }
+
+    // ==================== RIWAYAT ====================
+    function loadHistoryFromStorage() {
+        const saved = localStorage.getItem('ewsHistoryData');
+        if (saved) {
+            try {
+                allHistoryData = JSON.parse(saved).map(d => ({ ...d, timestamp: normalizeTimestamp(d.timestamp) }));
+            } catch(e) { allHistoryData = []; }
+        }
+    }
+
+    function storeHistoryData(data) {
+        const cleanData = {
+            water_level: data.water_level ?? null,
+            temperature: data.temperature ?? null,
+            water_presence: data.water_presence ?? null,
+            rain_detected: data.rain_detected ?? null,
+            timestamp: data.timestamp || Date.now()
+        };
+        const exists = allHistoryData.some(d => 
+            d.timestamp === cleanData.timestamp &&
+            d.water_level === cleanData.water_level &&
+            d.temperature === cleanData.temperature
+        );
+        if (exists) return;
+        allHistoryData.unshift(cleanData);
+        if (allHistoryData.length > HISTORY_LIMIT) allHistoryData.pop();
+        localStorage.setItem('ewsHistoryData', JSON.stringify(allHistoryData));
+        renderHistoryTable();
+    }
+
+    function aggregateDailyData(dataArray) {
+        const groups = {};
+        dataArray.forEach(item => {
+            const date = new Date(item.timestamp);
+            const dateKey = date.toISOString().split('T')[0];
+            if (!groups[dateKey]) groups[dateKey] = [];
+            groups[dateKey].push(item);
+        });
+        const result = [];
+        for (const dateKey in groups) {
+            const items = groups[dateKey];
+            const sumWater = items.reduce((acc, d) => acc + (d.water_level ?? 0), 0);
+            const sumTemp = items.reduce((acc, d) => acc + (d.temperature ?? 0), 0);
+            const countWater = items.filter(d => d.water_level !== null).length;
+            const countTemp = items.filter(d => d.temperature !== null).length;
+            const avgWater = countWater > 0 ? sumWater / countWater : null;
+            const avgTemp = countTemp > 0 ? sumTemp / countTemp : null;
+            const presence = items.some(d => d.water_presence === true);
+            const rain = items.some(d => d.rain_detected === true);
+            result.push({
+                timestamp: new Date(dateKey + 'T00:00:00').getTime(),
+                water_level: avgWater,
+                temperature: avgTemp,
+                water_presence: presence,
+                rain_detected: rain,
+                aggregated: true
+            });
+        }
+        result.sort((a,b) => b.timestamp - a.timestamp);
+        return result;
+    }
+
+    function getFilteredHistory() {
+        const now = Date.now();
+        let filtered = [];
+        if (historyFilterMode === 'daily') {
+            const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
+            filtered = allHistoryData.filter(d => d.timestamp >= startOfDay.getTime());
+        } else if (historyFilterMode === 'weekly') {
+            const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+            const recentData = allHistoryData.filter(d => d.timestamp >= sevenDaysAgo);
+            filtered = aggregateDailyData(recentData).slice(0,7);
+        } else if (historyFilterMode === 'monthly') {
+            const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+            const recentData = allHistoryData.filter(d => d.timestamp >= thirtyDaysAgo);
+            filtered = aggregateDailyData(recentData).slice(0,30);
+        } else {
+            filtered = allHistoryData.slice(0, 100);
+        }
+        return filtered;
+    }
+
+    function renderHistoryTable() {
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '';
+        const dataToShow = getFilteredHistory();
+        dataToShow.forEach(data => {
+            const date = new Date(data.timestamp);
+            let timeDisplay;
+            if (data.aggregated) {
+                timeDisplay = date.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            } else {
+                timeDisplay = date.toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+            }
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${timeDisplay}</td>
+                <td>${data.water_level !== null && data.water_level !== undefined ? Number(data.water_level).toFixed(1) : '-'}</td>
+                <td>${data.temperature !== null && data.temperature !== undefined ? Number(data.temperature).toFixed(1) : '-'}</td>
+                <td>${data.water_presence === true ? '✅ Ada' : data.water_presence === false ? '❌ Tidak' : '-'}</td>
+                <td>${data.rain_detected === true ? '🌧️ Ya' : data.rain_detected === false ? '☀️ Tidak' : '-'}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    // ==================== PERANGKAT ====================
+    function renderDevices() {
+        const sensorList = document.getElementById('sensorList');
+        const relayList = document.getElementById('relayList');
+        const onlineThreshold = 30000;
+        const isOnline = (Date.now() - lastDataTimestamp) < onlineThreshold;
+
+        const sensors = [
+            { name: 'Sensor Ultrasonik', icon: 'bi-droplet', value: currentData?.water_level !== null && currentData?.water_level !== undefined ? Number(currentData.water_level).toFixed(1) + ' cm' : '--' },
+            { name: 'Sensor Suhu DS18B20', icon: 'bi-thermometer', value: currentData?.temperature !== null && currentData?.temperature !== undefined ? Number(currentData.temperature).toFixed(1) + ' °C' : '--' },
+            { name: 'Sensor Keberadaan Air', icon: 'bi-droplet-half', value: currentData?.water_presence === true ? 'Ada Air' : currentData?.water_presence === false ? 'Tidak Ada' : '--' },
+            { name: 'Sensor Hujan', icon: 'bi-cloud-rain', value: currentData?.rain_detected === true ? 'Hujan' : currentData?.rain_detected === false ? 'Tidak Hujan' : '--' }
+        ];
+        let sensorHtml = '';
+        sensors.forEach(s => {
+            sensorHtml += `<div class="device-item"><div class="d-flex align-items-center"><i class="bi ${s.icon} device-icon" style="color:var(--accent);"></i><span>${s.name}</span></div><div class="d-flex align-items-center gap-3"><span>${s.value}</span><span class="badge ${isOnline ? 'bg-success' : 'bg-secondary'}">${isOnline ? 'Online' : 'Offline'}</span></div></div>`;
+        });
+        sensorList.innerHTML = sensorHtml || '<div class="text-muted">Belum ada data</div>';
+
+        const relayNames = ['Relay 1 (Lampu Hijau - Normal)', 'Relay 2 (Lampu Kuning - Siaga)', 'Relay 3 (Lampu Merah - Bahaya)', 'Relay 4 (Sirine - Bahaya)'];
+        let relayHtml = '';
+        for (let i=1; i<=4; i++) {
+            relayHtml += `<div class="device-item"><div class="d-flex align-items-center"><i class="bi bi-lightning-charge device-icon" style="color:var(--warning);"></i><span>${relayNames[i-1]}</span></div><div class="d-flex align-items-center gap-3"><span class="badge ${relayStates[i] ? 'bg-success' : 'bg-secondary'}">${relayStates[i] ? 'ON' : 'OFF'}</span></div></div>`;
+        }
+        relayList.innerHTML = relayHtml;
+    }
+
+    // ==================== ALERT & TELEGRAM ====================
+    function checkAlerts(data) {
+        const now = Date.now();
+        const water = data.water_level;
+        const temp = data.temperature;
+        const presence = data.water_presence;
+        const rain = data.rain_detected;
+
+        const siaga = settings.thresholdWaterSiaga;
+        const bahaya = settings.thresholdWaterBahaya;
+
+        let statusLevel = 1;
+        if (water !== null && water !== undefined) {
+            if (water > bahaya) statusLevel = 3;
+            else if (water > siaga) statusLevel = 2;
+        }
+
+        if (statusLevel !== lastKnownStatus) {
+            lastKnownStatus = statusLevel;
+            const statusLabel = statusLevel === 3 ? '🔴 BAHAYA' : statusLevel === 2 ? '🟡 SIAGA' : '🟢 NORMAL';
+            let msg = `🚨 <b>STATUS BANJIR BERUBAH</b>\n\n`;
+            msg += `<b>Status :</b> ${statusLabel}\n`;
+            msg += `<b>Level  :</b> ${statusLevel}\n\n`;
+            msg += `📊 <b>Data Sensor:</b>\n`;
+            msg += `• Ketinggian Air : ${water !== null && water !== undefined ? water.toFixed(1) + ' cm' : '-'}\n`;
+            msg += `• Suhu           : ${temp !== null && temp !== undefined ? temp.toFixed(1) + ' °C' : '-'}\n`;
+            msg += `• Keberadaan Air : ${presence === true ? '✅ Ada' : presence === false ? '❌ Tidak Ada' : '-'}\n`;
+            msg += `• Hujan          : ${rain === true ? '🌧️ Ya' : rain === false ? '☀️ Tidak' : '-'}\n\n`;
+            msg += `🕐 <i>${new Date().toLocaleString('id-ID')}</i>`;
+            sendTelegram(msg);
+        }
+
+        if (temp !== null && temp !== undefined && temp > settings.thresholdTempMax && (now - lastAlert.temp) > COOLDOWN) {
+            let msg = `⚠️ <b>SUHU TINGGI</b>\n\n`;
+            msg += `<b>Suhu :</b> ${temp.toFixed(1)} °C (batas ${settings.thresholdTempMax} °C)\n\n`;
+            msg += `📊 <b>Data Sensor Lainnya:</b>\n`;
+            msg += `• Ketinggian Air : ${water !== null && water !== undefined ? water.toFixed(1) + ' cm' : '-'}\n`;
+            msg += `• Keberadaan Air : ${presence === true ? '✅ Ada' : presence === false ? '❌ Tidak Ada' : '-'}\n`;
+            msg += `• Hujan          : ${rain === true ? '🌧️ Ya' : rain === false ? '☀️ Tidak' : '-'}\n\n`;
+            msg += `🕐 <i>${new Date().toLocaleString('id-ID')}</i>`;
+            sendTelegram(msg);
+            lastAlert.temp = now;
+        }
+    }
+
+    // Laporan berkala setiap 5 menit
+    function sendPeriodicReport() {
+        if (!currentData) return;
+        const data = currentData;
+        const water = data.water_level;
+        const temp = data.temperature;
+        const presence = data.water_presence;
+        const rain = data.rain_detected;
+
+        const statusLevel = (water !== null && water !== undefined) ? (water > settings.thresholdWaterBahaya ? 3 : water > settings.thresholdWaterSiaga ? 2 : 1) : 0;
+        const statusLabel = statusLevel === 3 ? '🔴 BAHAYA' : statusLevel === 2 ? '🟡 SIAGA' : statusLevel === 1 ? '🟢 NORMAL' : '❓ TIDAK DIKETAHUI';
+
+        let msg = `📋 <b>LAPORAN KONDISI TERKINI</b>\n\n`;
+        msg += `<b>Status :</b> ${statusLabel}\n\n`;
+        msg += `📊 <b>Data Sensor:</b>\n`;
+        msg += `• Ketinggian Air : ${water !== null && water !== undefined ? water.toFixed(1) + ' cm' : '-'}\n`;
+        msg += `• Suhu           : ${temp !== null && temp !== undefined ? temp.toFixed(1) + ' °C' : '-'}\n`;
+        msg += `• Keberadaan Air : ${presence === true ? '✅ Ada' : presence === false ? '❌ Tidak Ada' : '-'}\n`;
+        msg += `• Hujan          : ${rain === true ? '🌧️ Ya' : rain === false ? '☀️ Tidak' : '-'}\n\n`;
+        msg += `🕐 <i>${new Date().toLocaleString('id-ID')}</i>`;
+
+        sendTelegram(msg);
+    }
+
+    async function sendTelegram(message) {
+        const botToken = settings.telegramBotToken;
+        const chatId = settings.telegramChatId;
+        if (!botToken || !chatId) return;
+        try {
+            const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' })
+            });
+            const result = await response.json();
+            if (!result.ok) console.error('Telegram error:', result);
+        } catch (err) { console.error('Gagal kirim Telegram:', err); }
+    }
+
+    async function testTelegramNotification() {
+        const botToken = document.getElementById('telegramBotToken').value;
+        const chatId = document.getElementById('telegramChatId').value;
+        if (!botToken || !chatId) { alert('Isi Bot Token dan Chat ID terlebih dahulu!'); return; }
+        settings.telegramBotToken = botToken;
+        settings.telegramChatId = chatId;
+        await sendTelegram('✅ <b>Tes notifikasi</b> dari Early Warning System berhasil!');
+        alert('Pesan tes telah dikirim.');
+    }
+
+    // ==================== RELAY CONTROL ====================
+    function publishRelayStates(states) {
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.publish(settings.mqttTopicRelay, JSON.stringify(states));
+            document.getElementById('relay1').checked = states.relay1;
+            document.getElementById('relay2').checked = states.relay2;
+            document.getElementById('relay3').checked = states.relay3;
+            document.getElementById('relay4').checked = states.relay4;
+            relayStates[1] = states.relay1;
+            relayStates[2] = states.relay2;
+            relayStates[3] = states.relay3;
+            relayStates[4] = states.relay4;
+            renderDevices();
+        }
+    }
+
+    function computeAutoRelayStates(data) {
+        const water = data.water_level;
+        let relay1 = false, relay2 = false, relay3 = false, relay4 = false;
+
+        if (water !== null && water !== undefined) {
+            const siaga = settings.thresholdWaterSiaga;
+            const bahaya = settings.thresholdWaterBahaya;
+
+            if (water <= siaga) {
+                relay1 = true;
+                relay2 = false;
+                relay3 = false;
+                relay4 = false;
+            } else if (water > siaga && water <= bahaya) {
+                relay1 = false;
+                relay2 = true;
+                relay3 = false;
+                relay4 = false;
+            } else if (water > bahaya) {
+                relay1 = false;
+                relay2 = false;
+                relay3 = true;
+                relay4 = true;
+            }
+        }
+
+        return { relay1, relay2, relay3, relay4 };
+    }
+
+    function applyAutoRelay(data) {
+        const states = computeAutoRelayStates(data);
+        publishRelayStates(states);
+    }
+
+    function toggleRelay(relayNumber, state) {
+        if (relayMode === 'auto') {
+            document.getElementById(`relay${relayNumber}`).checked = relayStates[relayNumber];
+            return;
+        }
+        relayStates[relayNumber] = state;
+        publishRelayStates({ relay1: relayStates[1], relay2: relayStates[2], relay3: relayStates[3], relay4: relayStates[4] });
+    }
+
+    function updateRelayUIEnabled() {
+        document.querySelectorAll('.relay-toggle').forEach(t => t.disabled = (relayMode === 'auto'));
+    }
+
+    function loadRelayMode() {
+        relayMode = localStorage.getItem('ewsRelayMode') || 'manual';
+        document.getElementById('relayModeSwitch').checked = (relayMode === 'manual');
+        updateRelayModeLabel();
+    }
+
+    function updateRelayModeLabel() {
+        document.getElementById('relayModeLabel').textContent = relayMode === 'auto' ? 'Auto' : 'Manual';
+        updateRelayUIEnabled();
+    }
+
+    // ==================== EKSPOR CSV ====================
+    function exportCSV() {
+        const dataToShow = getFilteredHistory();
+        if (dataToShow.length === 0) { alert('Tidak ada data untuk diekspor.'); return; }
+        let csv = 'Waktu,Air (cm),Suhu (°C),Keberadaan Air,Hujan\n';
+        dataToShow.forEach(d => {
+            const date = new Date(d.timestamp);
+            const timeStr = d.aggregated ? date.toLocaleDateString('id-ID') : date.toLocaleString('id-ID');
+            const water = d.water_level !== null && d.water_level !== undefined ? Number(d.water_level).toFixed(1) : '';
+            const temp = d.temperature !== null && d.temperature !== undefined ? Number(d.temperature).toFixed(1) : '';
+            const presence = d.water_presence === true ? 'Ada' : d.water_presence === false ? 'Tidak' : '';
+            const rain = d.rain_detected === true ? 'Ya' : d.rain_detected === false ? 'Tidak' : '';
+            csv += `"${timeStr}",${water},${temp},${presence},${rain}\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `riwayat_${historyFilterMode}_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    // ==================== CHART INIT ====================
+    function initCharts() {
+        const ctxWater = document.getElementById('waterChart').getContext('2d');
+        waterChart = new Chart(ctxWater, {
+            type: 'line',
+            data: { labels: chartLabels, datasets: [{ label: 'Ketinggian Air (cm)', data: waterData, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)', tension: 0.4, fill: true }] },
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 10, bottom: 10 } }, scales: { y: { beginAtZero: false }, x: { grid: { display: false } } } }
+        });
+        const ctxTemp = document.getElementById('tempChart').getContext('2d');
+        tempChart = new Chart(ctxTemp, {
+            type: 'line',
+            data: { labels: chartLabels, datasets: [{ label: 'Suhu (°C)', data: tempData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', tension: 0.4, fill: true }] },
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 10, bottom: 10 } }, scales: { y: { beginAtZero: false }, x: { grid: { display: false } } } }
+        });
+    }
+
+    // ==================== EVENT LISTENERS ====================
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSettings();
+        loadDarkModePreference();
+        initCharts();
+        initMQTT();
+        fetchFirestoreCurrent();
+        fetchFirestoreHistory();
+        setInterval(fetchFirestoreCurrent, 30000);
+
+        updateClock();
+        setInterval(updateClock, 1000);
+
+        loadHistoryFromStorage();
+        renderHistoryTable();
+        updateChartsFromHistory(); // Muat grafik dari riwayat yang tersimpan
+        renderDevices();
+        loadRelayMode();
+
+        setInterval(sendPeriodicReport, 300000);
+
+        document.getElementById('relay1').addEventListener('change', function() { toggleRelay(1, this.checked); });
+        document.getElementById('relay2').addEventListener('change', function() { toggleRelay(2, this.checked); });
+        document.getElementById('relay3').addEventListener('change', function() { toggleRelay(3, this.checked); });
+        document.getElementById('relay4').addEventListener('change', function() { toggleRelay(4, this.checked); });
+
+        document.getElementById('relayModeSwitch').addEventListener('change', function() {
+            relayMode = this.checked ? 'manual' : 'auto';
+            localStorage.setItem('ewsRelayMode', relayMode);
+            updateRelayModeLabel();
+            if (relayMode === 'auto' && currentData) applyAutoRelay(currentData);
+        });
+
+        document.getElementById('sidebarToggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+        document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+        document.getElementById('testTelegramBtn').addEventListener('click', testTelegramNotification);
+        document.getElementById('historyFilter').addEventListener('change', function() { historyFilterMode = this.value; renderHistoryTable(); });
+        document.getElementById('exportCSVBtn').addEventListener('click', exportCSV);
+
+        document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
+
+        document.getElementById('mqttStatus').className = 'status-indicator status-disconnected';
+        document.getElementById('mqttStatusText').textContent = 'Menghubungkan...';
+        document.getElementById('firestoreStatus').className = 'status-indicator status-disconnected';
+        document.getElementById('firestoreStatusText').textContent = 'Menghubungkan...';
+    });
+</script>
+</body>
+</html>
